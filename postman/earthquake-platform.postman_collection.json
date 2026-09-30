@@ -1,0 +1,102 @@
+{
+  "info": {
+    "name": "Earthquake Real-Time Platform - Quipux",
+    "description": "Coleccion de ejemplo para probar la API de la prueba tecnica (ingesta y reportes de sismos USGS).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" }
+  ],
+  "item": [
+    {
+      "name": "Health check",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+      }
+    },
+    {
+      "name": "Listar sismos",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/earthquakes?min_magnitude=3&page=1&page_size=20&sort_by=event_time&order=desc",
+          "host": ["{{baseUrl}}"],
+          "path": ["earthquakes"],
+          "query": [
+            { "key": "min_magnitude", "value": "3" },
+            { "key": "max_magnitude", "value": "", "disabled": true },
+            { "key": "location", "value": "", "disabled": true },
+            { "key": "page", "value": "1" },
+            { "key": "page_size", "value": "20" },
+            { "key": "sort_by", "value": "event_time" },
+            { "key": "order", "value": "desc" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Detalle de un sismo",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/earthquakes/us7000xxxx",
+          "host": ["{{baseUrl}}"],
+          "path": ["earthquakes", "us7000xxxx"]
+        }
+      }
+    },
+    {
+      "name": "Metricas por hora (todas, paginado)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/metrics?page=1&page_size=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["metrics"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "page_size", "value": "20" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Metricas de la hora actual",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/metrics/current", "host": ["{{baseUrl}}"], "path": ["metrics", "current"] }
+      }
+    },
+    {
+      "name": "Reportes horarios (Airflow)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/reports?page=1&page_size=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["reports"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "page_size", "value": "20" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Metricas Prometheus (scrape)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/observability/metrics", "host": ["{{baseUrl}}"], "path": ["observability", "metrics"] }
+      }
+    },
+    {
+      "name": "WebSocket sismos en tiempo real (ver descripcion)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "ws://localhost:8000/ws/earthquakes", "host": ["ws:", "", "localhost:8000"], "path": ["ws", "earthquakes"] },
+        "description": "Este endpoint es un WebSocket, no un request HTTP normal. Abrelo desde la pestaña 'New > WebSocket Request' de Postman apuntando a ws://localhost:8000/ws/earthquakes para recibir los sismos nuevos en tiempo real."
+      }
+    }
+  ]
+}

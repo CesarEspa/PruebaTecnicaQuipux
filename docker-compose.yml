@@ -1,0 +1,152 @@
+services:
+
+  # ---------------------------------------------------------------
+  # Infraestructura
+  # ---------------------------------------------------------------
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet -u $$MONGO_INITDB_ROOT_USERNAME -p $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval \"db.adminCommand('ping')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"   # protocolo AMQP (lo usan nuestros servicios)
+      - "15672:15672" # panel web de administracion
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------
+  # Servicios de la aplicacion (los 3 minimos que pide el enunciado
+  # son mongodb, api e ingestion; consumer es el servicio de
+  # procesamiento que se agrega para desacoplar ingesta de escritura)
+  # ---------------------------------------------------------------
+  ingestion:
+    build:
+      context: .
+      dockerfile: src/deploy/Dockerfile
+    command: python -m src.entrypoints.run_ingestion
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    ports:
+      - "9101:9101" # metricas Prometheus
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  consumer:
+    build:
+      context: .
+      dockerfile: src/deploy/Dockerfile
+    command: python -m src.entrypoints.run_consumer
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MONGO_HOST: mongodb
+      RABBITMQ_HOST: rabbitmq
+    ports:
+      - "9102:9102" # metricas Prometheus
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: src/deploy/Dockerfile
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MONGO_HOST: mongodb
+      RABBITMQ_HOST: rabbitmq
+    ports:
+      - "8000:8000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------
+  # Orquestacion (Airflow) - modo "standalone": un solo contenedor
+  # con webserver + scheduler, pensado para desarrollo/pruebas.
+  # ---------------------------------------------------------------
+  airflow:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    command: standalone
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MONGO_HOST: mongodb
+      DATA_LAKE_PATH: /opt/airflow/data/lake
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      PYTHONPATH: /opt/airflow
+    volumes:
+      - ./src:/opt/airflow/src
+      - ./src/airflow/dags:/opt/airflow/dags
+      - ./data:/opt/airflow/data
+      - airflow_home:/opt/airflow
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------
+  # Observabilidad (bonus Nivel 2)
+  # ---------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+      - ingestion
+      - consumer
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  mongo_data:
+  grafana_data:
+  airflow_home:

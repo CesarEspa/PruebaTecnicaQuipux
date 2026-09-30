@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Entorno local
+.env
+
+# Datos generados en tiempo de ejecucion
+data/lake/**
+!data/lake/.gitkeep
+
+# Docker / Airflow
+airflow/logs/
+airflow/plugins/
+
+# Editor
+.vscode/
+.idea/
