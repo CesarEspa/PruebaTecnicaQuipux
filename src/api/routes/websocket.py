@@ -41,7 +41,8 @@ class ConnectionManager:
         for connection in list(self.active_connections):
             try:
                 await connection.send_json(message)
-            except Exception:
+            except Exception as error:
+                logger.warning(f"No se pudo enviar el mensaje, se desconecta el cliente: {error}")
                 self.disconnect(connection)
 
 
