@@ -6,9 +6,13 @@ Prueba técnica para Quipux. Ingesto los sismos que publica el USGS, los guardo 
 
 El diagrama de arquitectura y por qué elegí cada pieza están en [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Cómo levantarlo
+## Cómo levantarlo (en cualquier computador, de cero)
+
+Necesitas tener Docker Desktop instalado y corriendo. Nada más.
 
 ```bash
+git clone https://github.com/CesarEspa/PruebaTecnicaQuipux.git
+cd PruebaTecnicaQuipux
 cp .env.example .env
 docker compose up --build
 ```
