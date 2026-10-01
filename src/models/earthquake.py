@@ -5,10 +5,7 @@ from pydantic import BaseModel
 
 
 class EarthquakeEvent(BaseModel):
-    """
-    Representa un sismo ya transformado desde la respuesta de USGS
-    a nuestro propio formato interno (el "modelo sugerido" del enunciado).
-    """
+    """Un sismo ya transformado desde el formato de USGS a nuestro formato interno."""
 
     event_id: str
     magnitude: float

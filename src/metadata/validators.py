@@ -1,8 +1,4 @@
-"""
-Funciones que transforman datos "crudos" (de la API de USGS) a nuestros
-modelos internos, y funciones pequenas de validacion que se reutilizan
-en varios lugares.
-"""
+"""Transforma los datos crudos de USGS a nuestro modelo interno."""
 from datetime import datetime, timezone
 
 from src.config.constants import MAGNITUDE_RANGES
@@ -10,13 +6,7 @@ from src.models.earthquake import EarthquakeEvent
 
 
 def parse_usgs_feature(feature: dict) -> EarthquakeEvent | None:
-    """
-    Convierte un "feature" del GeoJSON de USGS en un EarthquakeEvent.
-
-    Si el feature viene con datos incompletos (pasa a veces con la API
-    publica de USGS) devolvemos None en vez de lanzar una excepcion,
-    para que el servicio de ingesta pueda saltarlo y seguir con los demas.
-    """
+    """Convierte un feature del GeoJSON de USGS en un EarthquakeEvent, o None si viene incompleto."""
     try:
         properties = feature["properties"]
         coordinates = feature["geometry"]["coordinates"]

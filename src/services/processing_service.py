@@ -1,11 +1,8 @@
 """
-Servicio de procesamiento (el "consumidor" de RabbitMQ).
-
-Responsabilidad unica: recibir un sismo desde la cola, guardarlo en
-MongoDB y actualizar las metricas de esa hora. Si el sismo ya existia
-(porque por ejemplo la ingesta se reinicio y perdio su cache), Mongo
-rechaza el insert gracias al indice unico en 'event_id' y simplemente
-lo ignoramos.
+Servicio de procesamiento: recibe un sismo desde la cola de RabbitMQ,
+lo guarda en Mongo y actualiza las metricas de esa hora. Si ya existia
+(por ejemplo la ingesta se reinicio y perdio su cache), el indice unico
+de 'event_id' hace que el insert falle y simplemente lo ignoramos.
 """
 from prometheus_client import Counter
 from pydantic import ValidationError

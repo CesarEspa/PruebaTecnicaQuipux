@@ -24,8 +24,6 @@ def main() -> None:
         try:
             start_consuming(process_earthquake_message)
         except Exception as error:
-            # Si se pierde la conexion con RabbitMQ (por ejemplo se reinicio
-            # el contenedor), esperamos un poco y lo intentamos de nuevo.
             logger.error(f"Se perdio la conexion con RabbitMQ: {error}. Reintentando en 5s...")
             time.sleep(5)
 

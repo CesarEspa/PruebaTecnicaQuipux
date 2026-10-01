@@ -13,13 +13,7 @@ router = APIRouter()
 
 @router.get("/earthquakes")
 def list_earthquakes(filters: Annotated[EarthquakeFilterParams, Query()]):
-    """
-    Lista los sismos guardados, con filtros, orden y paginacion.
-
-    FastAPI usa el modelo EarthquakeFilterParams (Pydantic) para leer y
-    validar los query params automaticamente, por ejemplo:
-    /earthquakes?min_magnitude=4&page=2&sort_by=magnitude&order=asc
-    """
+    """Lista los sismos guardados, con filtros, orden y paginacion."""
     db = get_db()
 
     query: dict = {}
@@ -31,8 +25,7 @@ def list_earthquakes(filters: Annotated[EarthquakeFilterParams, Query()]):
             query["magnitude"]["$lte"] = filters.max_magnitude
 
     if filters.location:
-        # $options "i" = busqueda sin importar mayusculas/minusculas.
-        query["location"] = {"$regex": filters.location, "$options": "i"}
+        query["location"] = {"$regex": filters.location, "$options": "i"}  # "i" = sin distinguir mayus/minus
 
     sort_direction = ASCENDING if filters.order == "asc" else DESCENDING
     skip = (filters.page - 1) * filters.page_size

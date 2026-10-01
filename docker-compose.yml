@@ -1,8 +1,5 @@
 services:
 
-  # ---------------------------------------------------------------
-  # Infraestructura
-  # ---------------------------------------------------------------
   mongodb:
     image: mongo:7
     restart: unless-stopped
@@ -34,11 +31,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # ---------------------------------------------------------------
-  # Servicios de la aplicacion (los 3 minimos que pide el enunciado
-  # son mongodb, api e ingestion; consumer es el servicio de
-  # procesamiento que se agrega para desacoplar ingesta de escritura)
-  # ---------------------------------------------------------------
   ingestion:
     build:
       context: .
@@ -88,10 +80,7 @@ services:
       mongodb:
         condition: service_healthy
 
-  # ---------------------------------------------------------------
-  # Orquestacion (Airflow) - modo "standalone": un solo contenedor
-  # con webserver + scheduler, pensado para desarrollo/pruebas.
-  # ---------------------------------------------------------------
+  # airflow standalone: un solo contenedor con webserver + scheduler, para desarrollo
   airflow:
     build:
       context: ./airflow
@@ -116,9 +105,6 @@ services:
       mongodb:
         condition: service_healthy
 
-  # ---------------------------------------------------------------
-  # Observabilidad (bonus Nivel 2)
-  # ---------------------------------------------------------------
   prometheus:
     image: prom/prometheus:v2.54.1
     restart: unless-stopped

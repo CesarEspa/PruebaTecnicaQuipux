@@ -1,9 +1,4 @@
-"""
-Servicio de metricas.
-
-Cada vez que se guarda un sismo nuevo, este servicio actualiza el
-documento de la coleccion 'metrics' correspondiente a esa hora.
-"""
+"""Actualiza el documento de 'metrics' de la hora correspondiente cada vez que llega un sismo nuevo."""
 from src.config.constants import COLLECTION_METRICS
 from src.config.logging import get_logger
 from src.database.mongodb import get_db
@@ -19,9 +14,8 @@ def update_metrics_for_event(event: EarthquakeEvent) -> None:
     window = get_hour_window(event.event_time)
     range_name = get_magnitude_range(event.magnitude)
 
-    # Paso 1: incrementamos los contadores y el maximo en una sola operacion
-    # atomica. Usamos upsert=True para crear el documento la primera vez
-    # que llega un sismo en esa hora.
+    # Incrementamos contadores y maximo en una sola operacion atomica.
+    # upsert=True crea el documento la primera vez que llega un sismo en esa hora.
     db[COLLECTION_METRICS].update_one(
         {"window": window},
         {
@@ -36,8 +30,8 @@ def update_metrics_for_event(event: EarthquakeEvent) -> None:
         upsert=True,
     )
 
-    # Paso 2: el promedio no se puede calcular con un simple $inc, asi que
-    # leemos el documento actualizado y guardamos el promedio recalculado.
+    # El promedio no se puede calcular con un simple $inc, asi que lo
+    # recalculamos leyendo el documento ya actualizado.
     metric_doc = db[COLLECTION_METRICS].find_one({"window": window})
     if metric_doc and metric_doc["earthquake_count"] > 0:
         avg_magnitude = metric_doc["sum_magnitude"] / metric_doc["earthquake_count"]

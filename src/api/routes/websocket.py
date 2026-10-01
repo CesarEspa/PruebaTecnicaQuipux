@@ -1,13 +1,9 @@
 """
-Endpoint de WebSocket para recibir sismos nuevos en tiempo real
-(bonus Nivel 3: "WebSockets para actualizacion en tiempo real").
+WebSocket para recibir sismos nuevos en tiempo real.
 
-Para mantenerlo simple, no conectamos el WebSocket directamente a
-RabbitMQ. En vez de eso, cada pocos segundos revisamos en MongoDB si
-hay sismos mas nuevos que el ultimo que ya mandamos, y si hay, se los
-enviamos a todos los clientes conectados. Es una forma sencilla de
-lograr actualizaciones "casi" en tiempo real sin mezclar codigo
-asincrono de FastAPI con la libreria sincrona de RabbitMQ.
+En vez de conectarlo directamente a RabbitMQ, cada pocos segundos
+revisamos en Mongo si hay sismos mas nuevos que el ultimo que mandamos,
+y si hay, se los avisamos a todos los clientes conectados.
 """
 import asyncio
 from datetime import datetime, timezone
@@ -57,7 +53,7 @@ async def broadcast_new_earthquakes_loop():
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
         if not manager.active_connections:
-            continue  # nadie conectado, no vale la pena consultar Mongo
+            continue
 
         db = get_db()
         cursor = db[COLLECTION_EARTHQUAKES].find(
@@ -74,7 +70,6 @@ async def websocket_earthquakes(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            # No esperamos mensajes del cliente, solo detectamos si se desconecta.
-            await websocket.receive_text()
+            await websocket.receive_text()  # solo para detectar si el cliente se desconecta
     except WebSocketDisconnect:
         manager.disconnect(websocket)

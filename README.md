@@ -1,151 +1,130 @@
 # Earthquake Real-Time Platform
 
-Prueba técnica **Quipux** — Plataforma de ingesta, procesamiento en tiempo real y
-reportes de sismos, usando datos públicos del **USGS Earthquake Program**.
+Prueba técnica para Quipux: una plataforma que consume los sismos que publica el
+USGS (United States Geological Survey), los guarda en MongoDB, calcula métricas
+en tiempo real y genera reportes por hora con Airflow.
 
-> Ver [`ARCHITECTURE.md`](ARCHITECTURE.md) para el diagrama de arquitectura completo,
-> la justificación de las decisiones de modelado de datos y la propuesta de
-> arquitectura analítica/ML (bonus Nivel 4).
+El diagrama de arquitectura y la explicación de las decisiones de diseño (por qué
+Mongo, por qué RabbitMQ, etc.) están en [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## 1. ¿Qué hace este proyecto?
+## Qué hace
 
-1. Un **servicio de ingesta** consulta la API pública de USGS cada 3 minutos y
-   publica los sismos nuevos en RabbitMQ.
-2. Un **servicio de procesamiento** (consumidor de RabbitMQ) guarda cada sismo
-   en MongoDB y actualiza las métricas de esa hora en tiempo real.
-3. Una **API REST** (FastAPI) expone los sismos, las métricas y los reportes,
-   además de un WebSocket para recibir sismos nuevos en vivo.
-4. Un **DAG de Airflow** corre cada hora, genera un reporte consolidado y lo
-   guarda en MongoDB (y una copia en Parquet).
-5. **Prometheus + Grafana** muestran métricas de los servicios en un dashboard.
+- Cada 3 minutos, un servicio revisa la API de USGS y publica los sismos nuevos en RabbitMQ.
+- Otro servicio escucha esa cola, guarda cada sismo en MongoDB y actualiza las métricas de esa hora.
+- Una API hecha con FastAPI expone esos datos (sismos, métricas, reportes) y también tiene un WebSocket que avisa cuando llega un sismo nuevo.
+- Un DAG de Airflow corre cada hora, arma un reporte con lo que pasó esa hora y lo guarda en Mongo (más una copia en Parquet).
+- Prometheus y Grafana muestran si los servicios están funcionando bien.
 
-Todo corre con Docker Compose, sin necesidad de instalar Python localmente.
+Todo se levanta con Docker Compose, no hace falta instalar Python en tu máquina.
 
-## 2. Requisitos
+## Requisitos
 
-- Docker Desktop (con Docker Compose v2, viene incluido).
-- Puertos libres en tu máquina: `8000`, `8080`, `9090`, `3000`, `15672`, `27017`, `5672`.
+- Docker Desktop instalado y corriendo.
+- Que estos puertos estén libres: 8000, 8080, 9090, 3000, 15672, 27017 y 5672.
 
-## 3. Cómo levantar el proyecto
+## Cómo levantarlo
 
 ```bash
-# 1. Copia el archivo de variables de entorno de ejemplo
 cp .env.example .env
-
-# 2. Levanta todo (la primera vez construye las imagenes, tarda unos minutos)
 docker compose up --build
 ```
 
-Cuando todo esté arriba vas a tener disponible:
+La primera vez tarda varios minutos porque descarga las imágenes de Mongo, RabbitMQ, Airflow, etc. y construye las nuestras. Cuando se calme el log, en otra terminal corre `docker compose ps` y revisa que todos digan "Up".
 
-| Servicio                    | URL                                      | Notas |
-|------------------------------|-------------------------------------------|-------|
-| API (Swagger/OpenAPI)         | http://localhost:8000/docs                | Documentación interactiva |
-| WebSocket de sismos en vivo    | ws://localhost:8000/ws/earthquakes        | Prueba desde Postman ("New > WebSocket Request") |
-| Airflow                      | http://localhost:8080                     | Usuario/clave: ver sección 6 |
-| RabbitMQ (panel admin)        | http://localhost:15672                    | Usuario/clave: los de tu `.env` |
-| Prometheus                   | http://localhost:9090                     | |
-| Grafana                      | http://localhost:3000                     | Usuario/clave: los de `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` en `.env` |
+Con todo arriba, esto es lo que puedes abrir:
 
-Para bajar todo:
+- http://localhost:8000/docs — la API, con una página para probar cada endpoint dando clic (Swagger).
+- ws://localhost:8000/ws/earthquakes — el WebSocket, se puede probar desde Postman con "New > WebSocket Request".
+- http://localhost:8080 — Airflow (usuario y contraseña se explican más abajo).
+- http://localhost:15672 — panel de RabbitMQ (usuario y clave son los que pusiste en el `.env`).
+- http://localhost:9090 — Prometheus.
+- http://localhost:3000 — Grafana (usuario/clave: los de `GRAFANA_ADMIN_USER` y `GRAFANA_ADMIN_PASSWORD` del `.env`).
+
+Para apagar todo:
 
 ```bash
 docker compose down
-# Si tambien quieres borrar los datos guardados (Mongo, Grafana, Airflow):
+```
+
+Si además quieres borrar los datos guardados (Mongo, Grafana, Airflow) y empezar de cero:
+
+```bash
 docker compose down -v
 ```
 
-## 4. Endpoints principales de la API
+## Endpoints de la API
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/earthquakes` | Lista sismos. Filtros: `min_magnitude`, `max_magnitude`, `location`. Paginación: `page`, `page_size`. Orden: `sort_by` (`event_time` \| `magnitude`), `order` (`asc` \| `desc`) |
-| GET | `/earthquakes/{event_id}` | Detalle de un sismo |
-| GET | `/metrics` | Métricas por hora (paginado), o `?window=2026-06-17T10` para una hora específica |
-| GET | `/metrics/current` | Métricas de la hora actual |
-| GET | `/reports` | Reportes horarios generados por Airflow (paginado) |
-| GET | `/health` | Chequeo de salud (verifica conexión a Mongo) |
+| Método | Ruta | Qué hace |
+|---|---|---|
+| GET | `/earthquakes` | Lista los sismos guardados. Admite filtros (`min_magnitude`, `max_magnitude`, `location`), paginación (`page`, `page_size`) y orden (`sort_by`, `order`) |
+| GET | `/earthquakes/{event_id}` | El detalle de un sismo |
+| GET | `/metrics` | Las métricas por hora. Con `?window=2026-06-17T10` trae la de esa hora puntual |
+| GET | `/metrics/current` | Las métricas de la hora actual |
+| GET | `/reports` | Los reportes que arma Airflow cada hora |
+| GET | `/health` | Para saber si la API puede hablar con Mongo |
 | GET | `/observability/metrics` | Métricas en formato Prometheus |
-| WS | `/ws/earthquakes` | Sismos nuevos en tiempo real |
+| WS | `/ws/earthquakes` | Avisa cuando llega un sismo nuevo |
 
-Ejemplos completos en la colección de Postman: [`postman/earthquake-platform.postman_collection.json`](postman/earthquake-platform.postman_collection.json)
-(importarla en Postman; la variable `baseUrl` ya viene configurada a `http://localhost:8000`).
+Hay una colección de Postman lista en [postman/earthquake-platform.postman_collection.json](postman/earthquake-platform.postman_collection.json), con la variable `baseUrl` ya apuntando a `http://localhost:8000`.
 
-## 5. Variables de entorno
+## Variables de entorno
 
-Ver [`.env.example`](.env.example). Ninguna credencial viene "quemada" en el código:
-todo se lee desde variables de entorno (usuario/clave de Mongo, RabbitMQ y Grafana).
+Están todas en [.env.example](.env.example), sin ninguna clave quemada en el código: usuario/contraseña de Mongo, de RabbitMQ y de Grafana se leen del `.env`.
 
-## 6. Airflow: usuario y contraseña
+## Usuario y contraseña de Airflow
 
-`airflow standalone` (el modo que usamos, pensado para desarrollo) crea un
-usuario admin con una contraseña aleatoria en el primer arranque. Para verla:
+Airflow corre en modo `standalone` (pensado para desarrollo), y la primera vez que arranca crea un usuario `admin` con una contraseña aleatoria. Para verla:
 
 ```bash
 docker compose logs airflow | grep -i password
 ```
 
-El DAG se llama `hourly_earthquake_report` y corre automáticamente cada hora
-(`schedule="@hourly"`). También se puede disparar manualmente desde la UI de
-Airflow con el botón ▶ para no tener que esperar una hora completa.
+El DAG se llama `hourly_earthquake_report` y está programado para correr cada hora. Si no quieres esperar, se puede disparar a mano desde la interfaz de Airflow con el botón de play.
 
-## 7. Cómo probar que todo funciona (flujo de punta a punta)
+## Cómo revisar que todo funciona
 
-1. `docker compose logs -f ingestion` — deberías ver logs cada 3 minutos con
-   la cantidad de sismos recibidos/nuevos.
-2. `docker compose logs -f consumer` — deberías ver "Sismo ... guardado
-   correctamente" poco después de cada ciclo de ingesta.
-3. `curl http://localhost:8000/earthquakes` — deberías ver los sismos guardados.
-4. `curl http://localhost:8000/metrics/current` — métricas de la hora actual.
-5. En Airflow, ejecuta manualmente el DAG `hourly_earthquake_report` y luego
-   `curl http://localhost:8000/reports` para ver el reporte generado.
-6. Abre Grafana (`http://localhost:3000`) → dashboard **"Earthquake Platform -
-   Overview"** (ya viene provisionado automáticamente).
+1. `docker compose logs -f ingestion` — cada 3 minutos debería aparecer una línea diciendo cuántos sismos trajo y cuántos eran nuevos.
+2. `docker compose logs -f consumer` — poco después debería aparecer "Sismo ... guardado correctamente".
+3. `curl http://localhost:8000/earthquakes` — ya deberían verse sismos guardados.
+4. `curl http://localhost:8000/metrics/current` — las métricas de la hora.
+5. Corre el DAG de Airflow manualmente y después pega `curl http://localhost:8000/reports` para ver el reporte que generó.
+6. Entra a Grafana, el dashboard ya viene armado solo (no hay que configurar nada).
 
-> Nota: la API pública de USGS (`all_hour.geojson`) solo trae sismos si
-> realmente ocurrieron en la última hora a nivel mundial. Si el feed viene
-> vacío en el momento de la prueba, es comportamiento normal de la API, no un
-> error del proyecto — el sistema simplemente no tendrá eventos nuevos que
-> procesar hasta que ocurra un sismo real.
+Algo a tener en cuenta: la API de USGS que usamos solo trae los sismos que pasaron en la última hora en todo el mundo. Si justo no hubo ningún sismo real cuando estás probando, el feed viene vacío — es normal, no es un error del proyecto.
 
-## 8. Estructura del proyecto
+## Estructura del proyecto
 
 ```
 src/
-├── deploy/Dockerfile          # imagen compartida por api / ingestion / consumer
-├── config/                    # settings, logging, constantes
-├── metadata/                  # schemas (validación Pydantic) y validators (parseo USGS)
-├── models/                    # modelos Pydantic (earthquake, metric, report)
-├── database/                  # conexión Mongo e índices
-├── messaging/                 # publisher/consumer de RabbitMQ
-├── clients/                   # cliente HTTP de USGS
-├── services/                  # lógica de negocio (ingesta, procesamiento, métricas, reportes)
-├── api/                       # FastAPI (rutas + main.py)
-├── airflow/dags/              # DAG de Airflow
-├── entrypoints/                # scripts que arrancan cada contenedor
-└── utils/                     # cache, ventanas de tiempo, serializadores
+├── deploy/Dockerfile    imagen que comparten api, ingestion y consumer
+├── config/              settings, logging, constantes
+├── metadata/            validacion de parametros y parseo de la respuesta de USGS
+├── models/              modelos de Pydantic (sismo, metrica, reporte)
+├── database/            conexion a Mongo e indices
+├── messaging/           publicar/consumir de RabbitMQ
+├── clients/             cliente HTTP de USGS
+├── services/            la logica de negocio: ingesta, procesamiento, metricas, reportes
+├── api/                 FastAPI (rutas y main.py)
+├── airflow/dags/        el DAG
+├── entrypoints/         los scripts que arrancan cada contenedor
+└── utils/               cache, ventanas de tiempo, serializadores
 
-airflow/                       # Dockerfile de Airflow (imagen oficial + pymongo/pandas/pyarrow)
-monitoring/                    # configuración de Prometheus y Grafana
-postman/                       # colección de Postman
-data/lake/                     # salida de los Parquet generados por Airflow (bonus Nivel 4)
+airflow/        Dockerfile de Airflow (imagen oficial + pymongo/pandas/pyarrow)
+monitoring/     configuracion de Prometheus y Grafana
+postman/        la coleccion de Postman
+data/lake/      aqui caen los Parquet que genera Airflow
 ```
 
-## 9. Bonificaciones implementadas
+## Cosas extra que agregué además de lo pedido
 
-- **Nivel 1**: Pydantic (modelos y validación de query params), logging
-  estructurado en JSON, separación de responsabilidades por carpetas, un solo
-  `MongoClient` reutilizado (pool de conexiones), cache en memoria con TTL
-  para `/metrics` y `/reports`.
-- **Nivel 2**: Prometheus (métricas propias en ingestion, consumer y api) +
-  Grafana con dashboard provisionado automáticamente.
-- **Nivel 3**: RabbitMQ para desacoplar ingesta de procesamiento (arquitectura
-  orientada a eventos) + WebSocket para push de sismos nuevos en tiempo real.
-- **Nivel 4**: ver [`ARCHITECTURE.md`](ARCHITECTURE.md) — propuesta de
-  arquitectura de datos analítica/ML, con una prueba de concepto real
-  (exportación de eventos a Parquet en cada corrida del DAG).
+- Pydantic en todos los modelos y en la validación de los query params de la API.
+- Logging en JSON en vez de texto plano.
+- Una cache simple en memoria para no pegarle a Mongo en cada request de `/metrics` y `/reports`.
+- Prometheus y Grafana, con métricas propias de cada servicio.
+- RabbitMQ para que la ingesta y el guardado en Mongo no dependan directamente uno del otro.
+- Un WebSocket para recibir sismos nuevos sin tener que estar refrescando.
+- Una idea de cómo escalar esto hacia analítica/Machine Learning más adelante (está en ARCHITECTURE.md), con una prueba real: cada reporte horario también se exporta a un archivo Parquet.
 
-## 10. Supuestos
+## Qué no se implementó
 
-Siguiendo el enunciado, **no se implementó**: autenticación, autorización,
-frontend, despliegue en la nube, ni CI/CD.
+Como dice el enunciado de la prueba, no hacía falta: autenticación, autorización, frontend, despliegue en la nube ni CI/CD.

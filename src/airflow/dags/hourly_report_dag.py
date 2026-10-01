@@ -1,15 +1,12 @@
 """
 DAG de Airflow: genera un reporte consolidado de sismos cada hora.
 
-Usamos la "TaskFlow API" de Airflow (los decoradores @dag y @task) porque
-hace que cada tarea sea simplemente una funcion normal de Python que
-recibe y devuelve datos; Airflow se encarga solo de pasar esos datos de
-una tarea a otra (esto se llama XCom).
+Usa la TaskFlow API (@dag y @task): cada tarea es una funcion normal de
+Python, y Airflow se encarga de pasar los datos de una a otra (XCom).
 
-El flujo tiene exactamente los 3 pasos que pide el enunciado:
-1. read_events       -> lee los sismos guardados en la ultima hora.
-2. generate_report   -> calcula el reporte consolidado.
-3. persist_report    -> guarda el reporte en Mongo y en un Parquet.
+1. read_events     -> lee los sismos de la ultima hora.
+2. generate_report -> calcula el reporte consolidado.
+3. persist_report  -> guarda el reporte en Mongo y en un Parquet.
 """
 from datetime import datetime, timedelta
 
@@ -44,19 +41,13 @@ def hourly_earthquake_report_dag():
     @task
     def read_events(data_interval_start=None, data_interval_end=None) -> list[dict]:
         """
-        Paso 1: lee de Mongo los sismos de la hora que le toca procesar a esta
-        ejecucion del DAG.
-
-        data_interval_start / data_interval_end los inyecta Airflow
-        automaticamente: son el inicio y el fin de la hora para la que se
-        esta corriendo esta ejecucion (no simplemente "la hora actual"),
-        que es lo correcto para que un DAG horario funcione bien incluso si
-        se ejecuta tarde o se vuelve a correr manualmente.
+        Lee de Mongo los sismos de la hora que le toca a esta ejecucion.
+        data_interval_start/end los inyecta Airflow automaticamente: son
+        el inicio y fin de esa hora, no simplemente "la hora actual".
         """
         events = read_events_for_window(data_interval_start, data_interval_end)
 
-        # XCom guarda los datos como JSON, asi que convertimos el datetime
-        # a texto antes de devolverlo.
+        # XCom guarda los datos como JSON, por eso el datetime se pasa a texto.
         return [
             {
                 "event_id": event["event_id"],
@@ -69,14 +60,14 @@ def hourly_earthquake_report_dag():
 
     @task
     def generate_report(events: list[dict], data_interval_start=None) -> dict:
-        """Paso 2: calcula total de sismos, magnitud promedio/maxima y top de ubicaciones."""
+        """Calcula total de sismos, magnitud promedio/maxima y top de ubicaciones."""
         report = build_report(events, report_date=data_interval_start)
         report["report_date"] = report["report_date"].isoformat()
         return report
 
     @task
     def persist_report(report: dict, events: list[dict]) -> None:
-        """Paso 3: guarda el reporte en 'hourly_reports' y una copia en Parquet."""
+        """Guarda el reporte en 'hourly_reports' y una copia en Parquet."""
         report_to_save = dict(report)
         report_to_save["report_date"] = datetime.fromisoformat(report["report_date"])
 

@@ -18,14 +18,7 @@ def list_metrics(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
 ):
-    """
-    Devuelve las metricas por hora (cantidad de sismos, magnitud promedio,
-    magnitud maxima y distribucion por rango).
-
-    Se puede pedir una ventana especifica con ?window=2026-06-17T10, o si
-    no se manda nada, se listan todas ordenadas de la mas reciente a la
-    mas antigua.
-    """
+    """Metricas por hora. Con ?window=2026-06-17T10 trae una especifica, si no, las lista todas."""
     cache = request.app.state.cache
     cache_key = f"metrics:{window}:{page}:{page_size}"
 

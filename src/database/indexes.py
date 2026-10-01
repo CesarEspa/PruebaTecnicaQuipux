@@ -1,20 +1,10 @@
 """
-Creacion de indices de MongoDB.
+Creacion de indices de Mongo. Se llama al arrancar la API y el consumer
+(crear un indice que ya existe no hace nada, es seguro llamarlo varias veces).
 
-Se ejecuta al arrancar el servicio de ingesta y la API (crear un indice
-que ya existe no hace nada, asi que es seguro llamarlo varias veces).
-
-Decisiones de diseno (explicadas tambien en el README):
-- earthquakes.event_id es UNIQUE: es la forma mas simple y segura de
-  evitar duplicados, dejamos que Mongo rechace el insert repetido en
-  vez de nosotros tener que revisar "a mano" si el evento ya existe.
-- earthquakes.event_time: casi todas las consultas (ultimos sismos,
-  reportes por hora) filtran u ordenan por fecha.
-- earthquakes.magnitude: se usa mucho para filtrar por rango de magnitud.
-- metrics.window es UNIQUE: cada ventana de una hora tiene un solo
-  documento que se va actualizando (upsert).
-- hourly_reports.report_date es UNIQUE: si el DAG de Airflow se vuelve a
-  ejecutar para la misma hora, actualiza el reporte en vez de duplicarlo.
+event_id es unico para evitar duplicados sin tener que revisarlo a mano.
+window y report_date tambien son unicos porque cada hora tiene un solo
+documento que se actualiza (upsert) en vez de crear uno nuevo cada vez.
 """
 from src.config.constants import (
     COLLECTION_EARTHQUAKES,

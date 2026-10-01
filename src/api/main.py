@@ -19,7 +19,6 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Metricas de Prometheus para la API (bonus Nivel 2).
 HTTP_REQUESTS = Counter(
     "api_http_requests_total", "Cantidad de requests a la API", ["method", "path", "status_code"]
 )
@@ -43,16 +42,14 @@ async def prometheus_middleware(request: Request, call_next):
 @app.on_event("startup")
 def on_startup():
     create_indexes()
-    # Cache compartida por toda la API (bonus Nivel 1: estrategias de cache).
     app.state.cache = SimpleCache(ttl_seconds=settings.cache_ttl_seconds)
-    # Tarea de fondo que revisa MongoDB y avisa por websocket cuando hay sismos nuevos.
     asyncio.create_task(websocket.broadcast_new_earthquakes_loop())
     logger.info("API iniciada correctamente")
 
 
 @app.get("/observability/metrics")
 def prometheus_metrics():
-    """Endpoint que Prometheus consulta para "scrapear" las metricas de esta API."""
+    """Endpoint que Prometheus consulta para leer las metricas de esta API."""
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

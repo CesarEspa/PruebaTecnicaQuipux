@@ -1,9 +1,4 @@
-"""
-Punto de entrada del contenedor de ingesta.
-
-Es un script muy simple: cada N segundos llama al servicio de ingesta.
-No usamos ninguna libreria de "scheduling" para mantenerlo facil de leer.
-"""
+"""Arranca el contenedor de ingesta: cada N segundos llama al servicio de ingesta."""
 import time
 
 from prometheus_client import start_http_server
@@ -26,8 +21,6 @@ def main() -> None:
         try:
             run_ingestion_cycle()
         except Exception as error:
-            # Cualquier error inesperado se registra pero NO tumba el servicio:
-            # simplemente intentamos de nuevo en el siguiente ciclo.
             logger.error(f"Error inesperado en el ciclo de ingesta: {error}")
 
         time.sleep(settings.ingestion_interval_seconds)

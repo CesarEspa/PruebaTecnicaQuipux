@@ -1,10 +1,7 @@
 """
-Servicio de reportes.
-
-Contiene las funciones que usa el DAG de Airflow. Las separamos del
-archivo del DAG a proposito: asi se pueden probar con pruebas normales
-de Python (sin necesitar Airflow corriendo) y el DAG queda como un
-simple "orquestador" que llama a estas funciones en orden.
+Funciones que usa el DAG de Airflow para armar el reporte horario.
+Van separadas del archivo del DAG para poder probarlas sin necesitar
+Airflow corriendo.
 """
 import os
 from collections import Counter
@@ -19,11 +16,8 @@ from src.database.mongodb import get_db
 
 logger = get_logger("services.reporting")
 
-# Carpeta donde guardamos los archivos Parquet (bonus Nivel 4: "procesamiento
-# de archivos Parquet en tiempo real o near real-time"). En Docker esta
-# carpeta esta montada como volumen para que los archivos no se pierdan.
-# Se puede sobreescribir con la variable de entorno DATA_LAKE_PATH (la usa
-# el contenedor de Airflow, que corre con un directorio de trabajo distinto).
+# Carpeta donde se guardan los Parquet. Configurable porque Airflow corre
+# con otro directorio de trabajo (ver DATA_LAKE_PATH en docker-compose.yml).
 DATA_LAKE_PATH = Path(os.getenv("DATA_LAKE_PATH", "data/lake"))
 
 
@@ -50,8 +44,6 @@ def build_report(events: list[dict], report_date: datetime) -> dict:
     magnitudes = [event["magnitude"] for event in events]
     locations = [event["location"] for event in events]
 
-    # Counter.most_common nos da las ubicaciones que mas se repiten, de
-    # mayor a menor, sin tener que escribir el conteo a mano.
     top_locations = [place for place, _ in Counter(locations).most_common(3)]
 
     return {
@@ -74,15 +66,9 @@ def save_report(report: dict) -> None:
 
 def export_events_to_parquet(events: list[dict], report_date: datetime) -> None:
     """
-    Prueba de concepto del Nivel 4 (arquitectura de datos analitica):
-    ademas de guardar en Mongo, dejamos una copia de los eventos crudos
-    de esa hora en un archivo Parquet, particionado por fecha y hora.
-
-    Parquet es un formato columnar pensado para analitica/Machine
-    Learning (mucho mas eficiente para leer con pandas/Spark/DuckDB que
-    leer todo desde Mongo). En una arquitectura real esto viviria en un
-    almacenamiento tipo S3/MinIO; aqui usamos disco local para que el
-    ejemplo funcione sin infraestructura extra.
+    Ademas de Mongo, deja una copia de los eventos de esa hora en un
+    Parquet particionado por fecha (pensado para analitica/ML, mas
+    liviano de leer con pandas/Spark que consultar Mongo directamente).
     """
     if not events:
         logger.info("No hay eventos para exportar a Parquet en esta ventana")

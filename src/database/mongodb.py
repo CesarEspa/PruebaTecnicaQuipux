@@ -1,16 +1,9 @@
 """
-Conexion a MongoDB.
+Conexion a MongoDB. El MongoClient se crea una sola vez por proceso y se
+reutiliza (pymongo ya maneja su propio pool de conexiones por dentro).
 
-Creamos el MongoClient UNA sola vez por proceso (variable a nivel de
-modulo) y lo reutilizamos en toda la app. pymongo ya maneja un pool de
-conexiones internamente, asi que no hay que abrir/cerrar conexion en
-cada request: eso es lo que pide el enunciado con "gestion eficiente
-de conexiones".
-
-Este modulo lee las variables de entorno directamente con os.getenv
-(en vez de usar src.config.settings) a proposito: asi tambien lo puede
-usar el DAG de Airflow sin tener que instalar pydantic-settings dentro
-de la imagen de Airflow.
+Usa os.getenv en vez de src.config.settings para que el DAG de Airflow
+tambien pueda importar este archivo sin necesitar pydantic-settings.
 """
 import os
 

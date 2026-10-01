@@ -1,6 +1,6 @@
 # Arquitectura
 
-## 1. Diagrama general
+## Diagrama general
 
 ```mermaid
 flowchart LR
@@ -39,91 +39,73 @@ flowchart LR
     PROM --> GRAF
 ```
 
-**Por que esta forma de desacoplar:** el servicio de ingesta **no** escribe
-directamente en MongoDB. Solo se encarga de hablar con la API externa (que
-puede fallar, estar lenta, etc.) y publicar en RabbitMQ. Si el servicio de
-procesamiento estuviera caído, los mensajes quedan esperando en la cola en
-vez de perderse, y la ingesta puede seguir funcionando sin que un problema de
-escritura en base de datos la bloquee. Esto es justamente lo que pide el
-enunciado con "principios de diseño desacoplado" y corresponde al bonus
-Nivel 3 (procesamiento orientado a eventos).
+La idea de separar ingesta y procesamiento con RabbitMQ en el medio es que el
+servicio de ingesta nunca toca MongoDB directamente. Solo habla con la API
+externa (que puede fallar o estar lenta) y publica en la cola. Si el servicio
+de procesamiento se cae un rato, los mensajes se quedan esperando en RabbitMQ
+en vez de perderse, y la ingesta sigue funcionando sin verse afectada por un
+problema de escritura en la base de datos.
 
-## 2. Decisiones de modelado de datos (MongoDB)
+## Por qué estas colecciones en Mongo
 
-### Coleccion `earthquakes`
-Un documento por sismo, tal como llega transformado desde USGS. Se eligio
-`event_id` como **indice unico** en vez de manejar la deduplicacion "a mano"
-en el codigo: es mas simple y mas seguro (aunque dos procesos intenten
-insertar el mismo sismo al mismo tiempo, Mongo solo deja pasar uno).
+**earthquakes**: un documento por sismo. `event_id` tiene índice único — en
+vez de revisar a mano si el sismo ya existe antes de guardarlo, simplemente
+se intenta insertar y Mongo rechaza el duplicado. También hay índice en
+`event_time` (casi toda consulta ordena o filtra por fecha) y en `magnitude`
+(se usa para filtrar por rango).
 
-Indices creados (`src/database/indexes.py`):
-- `event_id` (unique) — evita duplicados.
-- `event_time` — la mayoria de consultas ordenan o filtran por fecha.
-- `magnitude` — se usa mucho para filtrar por rango de magnitud.
+**metrics**: un documento por hora (`"2026-06-17T10"`), que se actualiza con
+operadores atómicos (`$inc`, `$max`) cada vez que llega un sismo nuevo, en
+vez de recalcular todo desde cero cada vez. `window` también es único: una
+hora, un solo documento.
 
-### Coleccion `metrics`
-Un documento por ventana de hora (ej. `"2026-06-17T10"`), que se va
-actualizando con operadores atomicos (`$inc`, `$max`) cada vez que llega un
-sismo nuevo, en vez de recalcular todo desde cero. Esto hace que la
-actualizacion sea O(1) sin importar cuantos sismos tenga esa hora.
-`window` tiene indice unico porque solo debe existir un documento por hora.
+**hourly_reports**: un documento por hora, generado por Airflow. `report_date`
+es único para que si el DAG se vuelve a correr para la misma hora, actualice
+el reporte en vez de duplicarlo.
 
-### Coleccion `hourly_reports`
-Un documento por hora generado por Airflow. `report_date` es unico: si el
-DAG se vuelve a ejecutar para la misma hora (por ejemplo, un reintento),
-actualiza el reporte existente en vez de crear uno duplicado (`upsert`).
+¿Por qué Mongo y no una base relacional? Los datos no tienen relaciones
+complejas entre sí (no hay joins), el volumen de escritura es bajo, pero las
+lecturas desde la API necesitan ser rápidas y con filtros flexibles. Un
+modelo de documentos con los índices correctos encaja mejor ahí que forzar un
+esquema relacional rígido para algo que en el fondo son solo registros de
+eventos.
 
-### Por que MongoDB y no otra base
-Los datos son documentos semi-estructurados que se leen mucho mas de lo que
-se relacionan entre si (no hay joins complejos), y el volumen de escritura es
-bajo (un sismo nuevo cada tanto), pero las lecturas de la API necesitan ser
-rapidas y flexibles en los filtros. Eso encaja bien con un modelo de
-documentos con los indices correctos, sin necesitar el overhead de un
-esquema relacional rigido.
+## Por qué RabbitMQ y no Kafka
 
-## 3. Por que RabbitMQ y no Kafka
+El volumen de sismos por hora a nivel mundial es bajo — nada que requiera el
+throughput o el particionamiento de Kafka. RabbitMQ es más simple de levantar
+(un solo contenedor) y el patrón que hace falta es sencillo: avisar a quien
+esté escuchando que hay un sismo nuevo, que es justo para lo que sirve un
+exchange tipo `fanout`.
 
-El enunciado permite elegir entre Kafka, RabbitMQ, WebSockets o
-procesamiento orientado a eventos (Nivel 3). Se eligio **RabbitMQ** porque:
-- El volumen de eventos es bajo (sismos por hora a nivel mundial, no miles
-  de mensajes por segundo), asi que no se necesita el particionamiento ni el
-  throughput de Kafka.
-- Es mas simple de operar (un solo contenedor, sin Zookeeper/KRaft) y mas
-  facil de entender para este alcance.
-- El patron que se necesita es simple: "avisar a quien este escuchando que
-  hay un sismo nuevo", que es exactamente para lo que sirve un exchange tipo
-  `fanout`.
+## Una idea para escalar esto hacia analítica y Machine Learning
 
-## 4. Nivel 4 — Arquitectura de datos para analitica avanzada y Machine Learning
-
-Esta seccion es una **propuesta de diseño** (como pide el enunciado), con una
-prueba de concepto real ya implementada: en cada corrida del DAG de Airflow,
-ademas de guardar el reporte en Mongo, se exportan los eventos crudos de esa
-hora a un archivo Parquet en `data/lake/bronze/date=YYYY-MM-DD/hour=HH.parquet`
-(ver `export_events_to_parquet` en `src/services/reporting_service.py`).
-
-### 4.1. Arquitectura propuesta: separar la capa transaccional de la analitica
+Esto es una propuesta de diseño, pero con algo concreto ya funcionando: en
+cada corrida del DAG de Airflow, además de guardar el reporte en Mongo, se
+exportan los sismos de esa hora a un archivo Parquet en
+`data/lake/bronze/date=YYYY-MM-DD/hour=HH.parquet` (función
+`export_events_to_parquet` en `src/services/reporting_service.py`).
 
 ```mermaid
 flowchart TB
-    subgraph OLTP["Capa transaccional (hoy)"]
+    subgraph OLTP["Lo que ya existe"]
         M[("MongoDB")]
         A["FastAPI"]
         WS["WebSocket"]
     end
 
-    subgraph LAKE["Data Lake (Parquet, particionado por fecha)"]
+    subgraph LAKE["Data lake en Parquet, particionado por fecha"]
         BRONZE["Bronze\ndatos crudos"]
         SILVER["Silver\nlimpios y deduplicados"]
         GOLD["Gold\nagregados y features de ML"]
     end
 
     subgraph BI["Analitica / ML"]
-        HIST["Dashboards historicos\n(Grafana/Metabase + DuckDB)"]
-        ML["Datasets de entrenamiento\npara modelos de ML"]
+        HIST["Dashboards historicos"]
+        ML["Datasets para entrenar modelos"]
     end
 
-    M -->|export incremental\n(Airflow, hoy cada hora)| BRONZE
+    M -->|export cada hora| BRONZE
     BRONZE -->|limpieza, dedupe| SILVER
     SILVER -->|agregaciones, features| GOLD
     GOLD --> HIST
@@ -131,48 +113,32 @@ flowchart TB
     M --> A --> WS
 ```
 
-**Idea central:** MongoDB sigue siendo la fuente de verdad para todo lo que
-necesita ser **rapido y reciente** (la API REST y el WebSocket), pero no se
-usa para analisis pesado sobre datos historicos — eso satura una base de
-datos pensada para transacciones. En su lugar, los datos se exportan de forma
-incremental (near real-time, ej. cada hora u cada pocos minutos) a un data
-lake en formato Parquet, organizado en capas:
+La idea es que Mongo siga siendo la fuente de verdad para todo lo que
+necesita ser rápido y reciente (la API y el WebSocket), pero que no se use
+para análisis pesado sobre todo el histórico — eso termina saturando una base
+pensada para transacciones. En vez de eso, los datos se van exportando a un
+data lake en Parquet organizado en capas:
 
-- **Bronze**: copia cruda de lo que llego, particionada por fecha/hora (lo
-  que ya esta implementado en este proyecto).
-- **Silver**: version limpia, validada contra el mismo modelo `EarthquakeEvent`
-  y sin duplicados, lista para consultarse con herramientas analiticas
-  (DuckDB, Spark, Pandas).
-- **Gold**: tablas agregadas listas para dashboards (ej. sismos por region
-  por dia) y para generar **datasets de entrenamiento** de Machine Learning
-  (ej. features como "sismos en las ultimas 24h en la misma region",
-  "energia sismica acumulada" usando la formula `10^(1.5 * magnitud)`, etc.).
+- **Bronze**: la copia cruda de lo que llegó, particionada por fecha (ya
+  implementado).
+- **Silver**: una versión limpia y sin duplicados, lista para consultarse con
+  herramientas como DuckDB, Spark o Pandas.
+- **Gold**: tablas ya agregadas para dashboards (sismos por región y día) y
+  para armar datasets de entrenamiento — por ejemplo, features como "cuántos
+  sismos hubo en la misma región en las últimas 24h" o la energía sísmica
+  acumulada (`10^(1.5 * magnitud)`).
 
-### 4.2. Dashboards
+Los dashboards en tiempo real seguirían saliendo de Mongo (como ya pasa hoy),
+mientras que los históricos y de tendencias saldrían de la capa Gold con
+alguna herramienta de BI, refrescados por Airflow.
 
-- **Tiempo real**: se sirven directamente desde MongoDB/`metrics` a traves de
-  la API y el WebSocket (lo que ya existe hoy) — necesitan datos frescos al
-  segundo, no agregaciones pesadas sobre todo el historico.
-- **Historicos / tendencias**: se sirven desde la capa Gold del data lake con
-  una herramienta de BI (Grafana con datasource de DuckDB/Postgres, o
-  Metabase), refrescados por un DAG de Airflow (por ejemplo, una vez al dia).
+Con el tiempo, también tendría sentido mover de Mongo a Parquet (y borrar de
+Mongo) los eventos más viejos que, digamos, 90 días, para que la base
+operativa no crezca indefinidamente, dejando el histórico completo
+disponible igual en el data lake.
 
-### 4.3. Volumen de datos historicos
-
-A medida que la coleccion `earthquakes` de Mongo crece, se recomienda:
-- Un **indice TTL** o un job periodico que archive (mueva a Parquet) y borre
-  de Mongo los eventos mas viejos que, por ejemplo, 90 dias — MongoDB queda
-  liviano y rapido para lo operativo, y el historico completo sigue
-  disponible en el data lake para analisis.
-- Particionar los archivos Parquet por fecha (como ya se hace) para que las
-  consultas analiticas por rango de fechas no tengan que leer archivos que no
-  necesitan.
-
-### 4.4. Por que no se implemento con Spark/MinIO/Trino en este entregable
-
-El alcance de esta prueba tecnica no pide desplegar esa infraestructura, y
-hacerlo sin un volumen real de datos que lo justifique seria sobre-ingenieria.
-Se opto por demostrar el concepto (exportacion a Parquet, particionado por
-fecha) con herramientas minimas (pandas/pyarrow) que ya estan en el proyecto,
-dejando documentada la ruta de crecimiento hacia una arquitectura de
-analitica/ML mas completa si el volumen de datos lo llegara a requerir.
+No llegué a montar algo como Spark o MinIO para esto — el alcance de la
+prueba no lo pide, y hacerlo sin un volumen real de datos que lo justifique
+sería meter infraestructura de más. Preferí dejar la prueba de concepto
+funcionando con lo mínimo (pandas y pyarrow, que ya estaban en el proyecto) y
+documentar hacia dónde crecería si hiciera falta.
