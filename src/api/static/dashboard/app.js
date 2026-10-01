@@ -243,6 +243,9 @@ cargarReportes();
 cargarMapa();
 conectarWebSocket();
 
-// Refresca metricas y mapa cada 30s para que se vea "vivo" sin recargar la pagina.
+// Refresca metricas, mapa y reportes cada 30s para que se vea "vivo" sin
+// recargar la pagina (sismos no necesita esto: ya le llegan los nuevos
+// al instante por el WebSocket).
 setInterval(cargarMetricas, 30000);
 setInterval(cargarMapa, 30000);
+setInterval(cargarReportes, 30000);
