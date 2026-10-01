@@ -1,5 +1,7 @@
 # Earthquake Real-Time Platform
 
+Primero que todo agradacerle por la oportunidad y por el tiempo de revisar mi perfil, mis proceso de seleccion, espero sea de su agrado y poder trabajar con ustedes. Un gusto Att: Magister Cesar Libardo España Salguero. 
+
 Prueba técnica para Quipux. Ingesto los sismos que publica el USGS, los guardo en MongoDB, calculo métricas en tiempo real y genero un reporte por hora con Airflow. Todo corre con Docker Compose.
 
 El diagrama de arquitectura y por qué elegí cada pieza están en [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -16,6 +18,7 @@ La primera vez tarda unos minutos (descarga Mongo, RabbitMQ, Airflow, etc. y con
 Con todo arriba:
 
 - http://localhost:8000/docs — la API, se prueba dando clic, no hace falta Postman
+- http://localhost:8000/dashboard — panel simple con sismos, métricas, reportes y un mapa
 - ws://localhost:8000/ws/earthquakes — WebSocket con los sismos en vivo
 - http://localhost:8080 — Airflow (usuario y clave, más abajo)
 - http://localhost:15672 — panel de RabbitMQ
@@ -83,8 +86,8 @@ data/lake/     los Parquet que genera Airflow
 
 ## Qué agregué además de lo pedido
 
-Pydantic en todo, logging en JSON, una cache simple para no saturar Mongo, Prometheus + Grafana, RabbitMQ para desacoplar la ingesta del guardado, un WebSocket en tiempo real, y una idea de cómo escalar esto a analítica/ML (ver ARCHITECTURE.md) con una prueba real: cada hora se genera un Parquet además del reporte en Mongo.
+Pydantic en todo, logging en JSON, una cache simple para no saturar Mongo, Prometheus + Grafana, RabbitMQ para desacoplar la ingesta del guardado, un WebSocket en tiempo real, un dashboard simple en `/dashboard` para ver todo sin usar curl/Postman (tabla de sismos, métricas con gráficos, reportes y un mapa), y una idea de cómo escalar esto a analítica/ML (ver ARCHITECTURE.md) con una prueba real: cada hora se genera un Parquet además del reporte en Mongo.
 
 ## Qué no hice
 
-No hacía falta: autenticación, autorización, frontend, nube ni CI/CD.
+No hacía falta: autenticación, autorización, frontend, nube ni CI/CD aunque decidi agregarle frontend con IA.

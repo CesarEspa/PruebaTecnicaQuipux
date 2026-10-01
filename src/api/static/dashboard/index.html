@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Earthquake Dashboard</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <header>
+    <h1>Earthquake Dashboard</h1>
+    <div class="live-indicator">
+      <span id="live-dot" class="dot"></span>
+      <span id="live-text">conectando...</span>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="sismos">Sismos</button>
+    <button class="tab-btn" data-tab="metricas">Métricas</button>
+    <button class="tab-btn" data-tab="reportes">Reportes</button>
+    <button class="tab-btn" data-tab="mapa">Mapa</button>
+  </nav>
+
+  <main>
+
+    <!-- SISMOS -->
+    <section id="tab-sismos" class="tab-panel active">
+      <div class="filters">
+        <input type="number" id="filtro-magnitud" placeholder="Magnitud minima" step="0.1" min="0">
+        <input type="text" id="filtro-lugar" placeholder="Buscar por lugar">
+        <button id="btn-buscar">Buscar</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Magnitud</th><th>Lugar</th><th>Fecha</th><th>Profundidad (km)</th></tr>
+          </thead>
+          <tbody id="tabla-sismos"></tbody>
+        </table>
+      </div>
+
+      <div class="pagination">
+        <button id="sismos-prev">&larr; Anterior</button>
+        <span id="sismos-pagina">Página 1</span>
+        <button id="sismos-next">Siguiente &rarr;</button>
+      </div>
+    </section>
+
+    <!-- METRICAS -->
+    <section id="tab-metricas" class="tab-panel">
+      <div class="cards">
+        <div class="card">
+          <span class="card-label">Sismos esta hora</span>
+          <span id="card-total" class="card-value">—</span>
+        </div>
+        <div class="card">
+          <span class="card-label">Magnitud promedio</span>
+          <span id="card-promedio" class="card-value">—</span>
+        </div>
+        <div class="card">
+          <span class="card-label">Magnitud máxima</span>
+          <span id="card-maxima" class="card-value">—</span>
+        </div>
+      </div>
+
+      <div class="charts">
+        <div class="chart-box">
+          <h3>Distribución por rango de magnitud (hora actual)</h3>
+          <canvas id="chart-distribucion"></canvas>
+        </div>
+        <div class="chart-box">
+          <h3>Sismos por hora (últimas ventanas)</h3>
+          <canvas id="chart-por-hora"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- REPORTES -->
+    <section id="tab-reportes" class="tab-panel">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Fecha</th><th>Total sismos</th><th>Magnitud prom.</th><th>Magnitud max.</th><th>Top ubicaciones</th></tr>
+          </thead>
+          <tbody id="tabla-reportes"></tbody>
+        </table>
+      </div>
+
+      <div class="pagination">
+        <button id="reportes-prev">&larr; Anterior</button>
+        <span id="reportes-pagina">Página 1</span>
+        <button id="reportes-next">Siguiente &rarr;</button>
+      </div>
+    </section>
+
+    <!-- MAPA -->
+    <section id="tab-mapa" class="tab-panel">
+      <p class="hint">Últimos sismos guardados, ubicados por latitud/longitud. El tamaño del círculo indica la magnitud.</p>
+      <div id="mapa" class="mapa-box"></div>
+    </section>
+
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

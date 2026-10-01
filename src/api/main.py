@@ -1,8 +1,10 @@
 """Aplicacion FastAPI: arma todo (rutas, cache, metricas, websocket) en un solo lugar."""
 import asyncio
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
+from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 from src.api.routes import earthquakes, health, metrics, reports, websocket
@@ -58,3 +60,8 @@ app.include_router(earthquakes.router, tags=["earthquakes"])
 app.include_router(metrics.router, tags=["metrics"])
 app.include_router(reports.router, tags=["reports"])
 app.include_router(websocket.router, tags=["websocket"])
+
+# Dashboard: no lo pide el enunciado, lo agregamos para visualizar los datos
+# sin tener que usar curl/Postman. Es HTML/JS planos, sin build step.
+STATIC_DIR = Path(__file__).parent / "static" / "dashboard"
+app.mount("/dashboard", StaticFiles(directory=STATIC_DIR, html=True), name="dashboard")
